@@ -1,0 +1,5 @@
+.vscode
+.env
+migrations
+app.db
+Pipfile.lock
