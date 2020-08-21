@@ -1,7 +1,6 @@
 from datetime import datetime
 from main import db
 
-
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), index=True, nullable=False, unique=True)
@@ -9,8 +8,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(128))
 
     def __repr__(self):
-        # return f"{self.name}"
-        return f"{self.id}-{self.name}"
+        return f"{self.name}"
 
 
 class Survey(db.Model):
@@ -18,10 +16,10 @@ class Survey(db.Model):
     theme = db.Column(db.String(64), index=True, nullable=False)
     creator = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, index=False, default=datetime.now)
+    # questions = db.relationship('Question', backref='surveyz', lazy='dynamic')
 
     def __repr__(self):
         return f"{self.theme}"
-
 
 class Question(db.Model):
     id = db.Column(db.Integer, primary_key=True)

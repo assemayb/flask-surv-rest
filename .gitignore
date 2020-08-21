@@ -3,3 +3,4 @@
 migrations
 app.db
 Pipfile.lock
+test.py
