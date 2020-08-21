@@ -69,7 +69,7 @@ def get_or_create_survey():
         db.session.commit()
 
 
-@app.route("/survey", methods=["POST", "GET"])
+@app.route("/survey", methods=["POST", "GET", "DELETE"])
 def add_to_survey():
     if request.method == "POST":
         survey_id = request.args.get('id')
@@ -117,3 +117,31 @@ def add_to_survey():
                     data_dic['answers'].append(ans.content)
                 response_data['questions'].append(data_dic)
         return send_response("200", response_data)
+
+
+@app.route("/survey-delete", methods=["DELETE"])
+def delete_surv():
+    req_id = request.args.get('id')
+    req_user = request.args.get('username')
+    survey = Survey.query.get(req_id)
+    if survey is None:
+        return send_response("400", {"msg": "no survey with this id is available!"})
+    print(survey.creator)
+    if req_user == survey.creator:
+        db.session.delete(survey)
+        db.session.commit()
+        print(f"===> survey {survey.theme} deleted")
+        survey_questions = Question.query.filter_by(survey=req_id)
+        for single_question in survey_questions:
+            questiond_id = single_question.id
+            db.session.delete(single_question)
+            db.session.commit()
+            print(f"====>Question {single_question.content} Deleted")
+            associated_ans = Answer.query.filter_by(question=questiond_id)
+            for ans in associated_ans:
+                db.session.delete(ans)
+                db.session.commit()
+                print(f"===>Answer {ans.content} Deleted")
+        return send_response("200", {"msg": "ok done!"})
+    else:
+        return send_response("403", {"msg": "survey isn't created by you!"})
