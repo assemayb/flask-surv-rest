@@ -49,6 +49,11 @@ def get_or_create_survey():
                 sur_data['id'] = survey.id
                 sur_data['theme'] = survey.theme
                 sur_data['creator'] = survey.creator
+                creator_name = User.query.get(survey.creator).name
+                questions_num = Question.query.filter_by(
+                    survey=survey.id).count()
+                sur_data['creator_name'] = creator_name
+                sur_data['questions_num'] = questions_num
                 sur_data['created_at'] = survey.created_at
                 all_surveys.append(sur_data)
             return send_response("200", json.dumps(all_surveys, default=str))
@@ -69,7 +74,21 @@ def get_or_create_survey():
         db.session.commit()
 
 
-@app.route("/survey", methods=["POST", "GET", "DELETE"])
+@app.route("/user-surveys", methods=["GET"])
+def get_user_surveys():
+    request_data = json.loads(request.data)
+    request_username = request_data['username']
+    request_user_id = User.query.filter_by(name=request_username).first().id
+    all_user_surveys = Survey.query.filter_by(creator=request_user_id)
+    response = []
+    for survey in all_user_surveys:
+        survey_dict = {"id": survey.id,
+                       "theme": survey.theme, "creator": survey.creator, "created_at": survey.created_at}
+        response.append(survey_dict)
+    return send_response("200", json.dumps(response, default=str))
+
+
+@app.route("/survey", methods=["POST", "GET"])
 def add_to_survey():
     if request.method == "POST":
         survey_id = request.args.get('id')
@@ -93,7 +112,7 @@ def add_to_survey():
                     db.session.add(a)
                     db.session.commit()
                     print(f" added answer'{a}'")
-                return send_response("200", {"msg": "ok for now!"})
+                return send_response("200", {"msg": "question and answers added"})
             else:
                 return send_response("400", {"msg": "Enter all required data fields"})
         else:
@@ -101,17 +120,22 @@ def add_to_survey():
 
     elif request.method == "GET":
         survey_id = request.args.get('id')
-        survey = Survey.query.get(survey_id)
-        if survey:
+        sur = Survey.query.get(survey_id)
+        
+        if sur != None:
             response_data = {}
-            response_data['title'] = survey.theme
-            response_data['creator'] = survey.creator
+            response_data['title'] = sur.theme
+            response_data['creator'] = sur.creator
             response_data['questions'] = []
             survey_questions = Question.query.filter_by(survey=survey_id)
+            for q in survey_questions:
+                print(q.content)
+
             for sq in survey_questions:
-                questiod_id, questiod_title = sq.id, sq.content
-                data_dic = {"id": questiod_id, "title": questiod_title}
-                question_answers = Answer.query.filter_by(question=questiod_id)
+                question_id = sq.id
+                question_title = sq.content
+                data_dic = {"id": question_id, "question_title": question_title}
+                question_answers = Answer.query.filter_by(question=question_id)
                 data_dic['answers'] = []
                 for ans in question_answers:
                     data_dic['answers'].append(ans.content)
@@ -145,3 +169,47 @@ def delete_surv():
         return send_response("200", {"msg": "ok done!"})
     else:
         return send_response("403", {"msg": "survey isn't created by you!"})
+
+
+# TEMP LOGIN
+@app.route("/login", methods=["POST"])
+def login_user():
+    user_data = json.loads(request.data)
+    username = user_data['username']
+    password = user_data['password']
+    print(user_data)
+    does_exist = User.query.filter_by(name=username).first()
+    if does_exist:
+        # CREATING A MOCK ACCESS TOKEN
+        access = [f"{i}cv" for i in range(10)]
+        refresh = [f"{i}ks" for i in range(10)]
+        accessToken = ""
+        refreshToken = ""
+        for i in range(len(access)):
+            accessToken += access[i]
+            refreshToken += refresh[i]
+        print(accessToken, refreshToken)
+        response_dic = {"username": username,
+                        "accessToken": accessToken, "refreshToken": refreshToken}
+        return send_response("200", response_dic)
+    else:
+        return send_response("400", {"msg": "no user"})
+
+
+# CREATE NEW USER
+@app.route("/create-user", methods=["POST"])
+def create_user():
+    request_data = json.loads(request.data)
+    username, password = request_data['username'], request_data['password']
+    email = request_data['email']
+    users_exists = User.query.filter_by(name=username).first()
+    if users_exists:
+        return send_response("400", {"msg": "user with this name does exist"})
+    new_user = User(
+        name=username,
+        password_hash=password,
+        email=email
+    )
+    db.session.add(new_user)
+    db.session.commit()
+    return send_response("200", {"msg": "ok cool User Added"})
