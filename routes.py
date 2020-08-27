@@ -1,7 +1,22 @@
+import time
 import json
+import random
 from main import app, db
-from models import User, Survey, Question, Answer
+from models import User, Survey, Question, Answer, FormMetaData
 from flask import request, Response, make_response, jsonify
+
+
+def random_token_generator():
+    token = ""
+    all_small_letters = [chr(i) for i in range(97, 123)]
+    nums = [str(i) for i in range(10)]
+    chars = [str(i) for i in range(10) if i % random.randint(2, 5) == 0]
+    for i in range(6):
+        num = random.choice(nums)
+        letter = random.choice(all_small_letters)
+        char = random.choice(chars)
+        token += num + letter + char
+    return token
 
 
 def send_response(status, response, mimetype='application/json'):
@@ -59,31 +74,38 @@ def get_or_create_survey():
             return send_response("200", json.dumps(all_surveys, default=str))
         except Exception as e:
             print(e)
+
     elif request.method == "POST":
         req_data = json.loads(request.data)
         theme_name = req_data['theme']
         does_exist = Survey.query.filter_by(theme=theme_name).first()
         if does_exist:
             return send_response("404", {"msg": "Survey with name does exist"})
-        user = req_data['username']
+        username = req_data['username']
+        creator_id = User.query.filter_by(name=username).first().id
         new_survey = Survey(
             theme=theme_name,
-            creator=user
+            creator=creator_id
         )
         db.session.add(new_survey)
         db.session.commit()
+        return send_response("200", {"msg": "Survey Created!"})
 
 
 @app.route("/user-surveys", methods=["GET"])
 def get_user_surveys():
-    request_data = json.loads(request.data)
-    request_username = request_data['username']
+    request_username = request.args['username']
     request_user_id = User.query.filter_by(name=request_username).first().id
     all_user_surveys = Survey.query.filter_by(creator=request_user_id)
     response = []
     for survey in all_user_surveys:
+        creator_name = User.query.get(survey.creator).name
+        questions_num = Question.query.filter_by(
+            survey=survey.id).count()
         survey_dict = {"id": survey.id,
                        "theme": survey.theme, "creator": survey.creator, "created_at": survey.created_at}
+        survey_dict['creator_name'] = creator_name
+        survey_dict['questions_num'] = questions_num
         response.append(survey_dict)
     return send_response("200", json.dumps(response, default=str))
 
@@ -98,77 +120,85 @@ def add_to_survey():
             question, answers = survey_data['title'], survey_data.get(
                 'answers')
             if question and answers:
-                prev_id = Question.query.count()
-                q = Question(
-                    content=question,
-                    survey=survey_id
-                )
-                db.session.add(q)
-                db.session.commit()
-                print("question added")
-                new_question_id = prev_id + 1
-                for ans in answers:
-                    a = Answer(content=ans, question=new_question_id)
-                    db.session.add(a)
+                is_quest_submitted = Question.query.filter_by(
+                    content=question).first()
+                if is_quest_submitted is None:
+                    prev_id = Question.query.count()
+                    q = Question(
+                        content=question,
+                        survey=survey_id
+                    )
+                    db.session.add(q)
                     db.session.commit()
-                    print(f" added answer'{a}'")
-                return send_response("200", {"msg": "question and answers added"})
+                    print("question added")
+                    new_question_id = prev_id + 1
+                    for ans in answers:
+                        a = Answer(content=ans, question=new_question_id)
+                        db.session.add(a)
+                        db.session.commit()
+                        print(f" added answer'{a}'")
+                    return send_response("200", {"msg": "question and answers added"})
+                else:
+                    return send_response("400", {"msg": "this question exists"})
             else:
                 return send_response("400", {"msg": "Enter all required data fields"})
         else:
             return send_response("400", {"msg": "survey does not exist"})
-
     elif request.method == "GET":
         survey_id = request.args.get('id')
         sur = Survey.query.get(survey_id)
-        
         if sur != None:
             response_data = {}
             response_data['title'] = sur.theme
             response_data['creator'] = sur.creator
             response_data['questions'] = []
             survey_questions = Question.query.filter_by(survey=survey_id)
-            for q in survey_questions:
-                print(q.content)
-
             for sq in survey_questions:
                 question_id = sq.id
                 question_title = sq.content
-                data_dic = {"id": question_id, "question_title": question_title}
+                data_dic = {"id": question_id,
+                            "question_title": question_title}
                 question_answers = Answer.query.filter_by(question=question_id)
                 data_dic['answers'] = []
                 for ans in question_answers:
-                    data_dic['answers'].append(ans.content)
+                    ansDict = {"answer_id": ans.id,
+                               "answer_value": ans.content}
+                    data_dic['answers'].append(ansDict)
                 response_data['questions'].append(data_dic)
         return send_response("200", response_data)
 
 
-@app.route("/survey-delete", methods=["DELETE"])
-def delete_surv():
-    req_id = request.args.get('id')
-    req_user = request.args.get('username')
-    survey = Survey.query.get(req_id)
-    if survey is None:
-        return send_response("400", {"msg": "no survey with this id is available!"})
-    print(survey.creator)
-    if req_user == survey.creator:
-        db.session.delete(survey)
-        db.session.commit()
-        print(f"===> survey {survey.theme} deleted")
-        survey_questions = Question.query.filter_by(survey=req_id)
-        for single_question in survey_questions:
-            questiond_id = single_question.id
-            db.session.delete(single_question)
-            db.session.commit()
-            print(f"====>Question {single_question.content} Deleted")
-            associated_ans = Answer.query.filter_by(question=questiond_id)
-            for ans in associated_ans:
-                db.session.delete(ans)
-                db.session.commit()
-                print(f"===>Answer {ans.content} Deleted")
-        return send_response("200", {"msg": "ok done!"})
+# CHECK THE USER
+@app.route("/check-user", methods=["GET"])
+def check_user():
+    survey_id = int(request.args.get("survey"))
+    req_ip = request.remote_addr
+    time.sleep(1)
+    ip = FormMetaData.query.filter_by(survey=survey_id, user_ip=req_ip).first()
+    is_ip_saved = True if ip is not None else False
+    if is_ip_saved:
+        return send_response("204", {"msg": f"{req_ip} is not fine"})
     else:
-        return send_response("403", {"msg": "survey isn't created by you!"})
+        return send_response("200", {"msg": f"{req_ip} is fine"})
+
+
+# SUBMIT FORM
+@app.route("/submit-form", methods=["POST"])
+def submit_form():
+    client_request_ip = request.remote_addr
+    survey_id = int(request.args.get("survey"))
+    submitted_data = json.loads(request.data)
+    survey_data = submitted_data['submittedData']
+    if (client_request_ip and survey_id):
+        new_meta = FormMetaData(
+            survey=survey_id,
+            user_ip=client_request_ip
+        )
+        db.session.add(new_meta)
+        db.session.commit()
+        return send_response("200", {"msg": "Form Submitted Successfully."})
+    else:
+        return send_response("400", {"msg": "can't submit!"})
 
 
 # TEMP LOGIN
@@ -180,14 +210,8 @@ def login_user():
     print(user_data)
     does_exist = User.query.filter_by(name=username).first()
     if does_exist:
-        # CREATING A MOCK ACCESS TOKEN
-        access = [f"{i}cv" for i in range(10)]
-        refresh = [f"{i}ks" for i in range(10)]
-        accessToken = ""
-        refreshToken = ""
-        for i in range(len(access)):
-            accessToken += access[i]
-            refreshToken += refresh[i]
+        accessToken = random_token_generator()
+        refreshToken = random_token_generator()
         print(accessToken, refreshToken)
         response_dic = {"username": username,
                         "accessToken": accessToken, "refreshToken": refreshToken}
@@ -213,3 +237,33 @@ def create_user():
     db.session.add(new_user)
     db.session.commit()
     return send_response("200", {"msg": "ok cool User Added"})
+
+
+@app.route("/survey-delete", methods=["DELETE"])
+def delete_surv():
+    req_id = request.args.get('id')
+    req_user = request.args.get('username')
+    req_user_id = User.query.filter_by(name=req_user).first().id
+    survey = Survey.query.get(req_id)
+    if survey is None:
+        return send_response("400", {"msg": "no survey with this id is available!"})
+    if req_user_id == survey.creator:
+        db.session.delete(question_to_delete)
+        db.session.commit()
+        survey_questions = Question.query.filter_by(survey=req_id)
+        for single_question in survey_questions:
+            questiond_id = single_question.id
+            associated_ans = Answer.query.filter_by(question=questiond_id)
+            for ans in associated_ans:
+                db.session.delete(ans)
+                db.session.commit()
+                print(f"====>Question {single_question.content} Deleted")
+            db.session.delete(single_question)
+            db.session.commit()
+            print(f"===>Answer {ans.content} Deleted")
+        db.session.delete(survey)
+        db.session.commit()
+        print(f"===> survey {survey.theme} deleted")
+        return send_response("200", {"msg": "ok done!"})
+    else:
+        return send_response("403", {"msg": "survey isn't created by you!"})

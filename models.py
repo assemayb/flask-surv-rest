@@ -41,3 +41,11 @@ class Answer(db.Model):
     def __repr__(self):
         shortened_content = self.content[:50]
         return f"{shortened_content}"
+
+class FormMetaData(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    survey = db.Column(db.Integer, nullable=False, index=True)
+    user_ip = db.Column(db.String(150), nullable=False, index=True)  
+
+    def __repr__(self):
+        return f"{user_ip}-{survey}"
