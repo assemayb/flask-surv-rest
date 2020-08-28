@@ -2,7 +2,7 @@ import time
 import json
 import random
 from main import app, db
-from models import User, Survey, Question, Answer, FormMetaData
+from models import User, Survey, Question, Answer, FormMetaData, FormData
 from flask import request, Response, make_response, jsonify
 
 
@@ -151,6 +151,8 @@ def add_to_survey():
             response_data = {}
             response_data['title'] = sur.theme
             response_data['creator'] = sur.creator
+            creator_name = User.query.get(sur.creator).name
+            response_data['creator_name'] = creator_name
             response_data['questions'] = []
             survey_questions = Question.query.filter_by(survey=survey_id)
             for sq in survey_questions:
@@ -190,6 +192,19 @@ def submit_form():
     submitted_data = json.loads(request.data)
     survey_data = submitted_data['submittedData']
     if (client_request_ip and survey_id):
+        for single_item in survey_data:
+            # question_id = single_item["questionId"]
+            question_val =  single_item["quesVal"]
+            # answer_id = single_item["ansId"]
+            answer_val = single_item["ansVal"]
+            new_form_data = FormData(
+                survey=survey_id,
+                question=question_val,
+                answer=answer_val
+            )
+            db.session.add(new_form_data)
+            db.session.commit()
+            print("===> question has beed added")
         new_meta = FormMetaData(
             survey=survey_id,
             user_ip=client_request_ip
@@ -199,6 +214,18 @@ def submit_form():
         return send_response("200", {"msg": "Form Submitted Successfully."})
     else:
         return send_response("400", {"msg": "can't submit!"})
+
+# GETTING A FORM DATA
+@app.route("/form-data", methods=["GET"])
+def get_form_data():
+    survey_id = int(request.args.get("survey"))
+    survey_data = FormData.query.filter_by(survey=survey_id)
+    for x in survey_data:
+        survey, question = Survey.query.get(x.survey), Question.query.get(x.question)
+        answer = Answer.query.get(x.answer)
+        print(x.id, survey.theme, question.content, answer.content)
+    return send_response("200", {"msg": "ok for now!"})
+    
 
 
 # TEMP LOGIN

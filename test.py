@@ -21,7 +21,6 @@ arr2 = arr
 # print(chr(65 - 28))
 # print(ord("A") - ord("a"))
 
-
 def random_token_generator():
     token = ""
     all_small_letters = [chr(i) for i in range(97, 123)]

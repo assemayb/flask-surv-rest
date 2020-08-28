@@ -1,6 +1,7 @@
 from datetime import datetime
 from main import db
 
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), index=True, nullable=False, unique=True)
@@ -20,6 +21,7 @@ class Survey(db.Model):
 
     def __repr__(self):
         return f"{self.theme}"
+
 
 class Question(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -42,10 +44,21 @@ class Answer(db.Model):
         shortened_content = self.content[:50]
         return f"{shortened_content}"
 
+
 class FormMetaData(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     survey = db.Column(db.Integer, nullable=False, index=True)
-    user_ip = db.Column(db.String(150), nullable=False, index=True)  
+    user_ip = db.Column(db.String(150), nullable=False, index=True)
 
     def __repr__(self):
-        return f"{user_ip}-{survey}"
+        return f"{self.user_ip}-{self.survey}"
+
+
+class FormData(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    survey = db.Column(db.Integer, db.ForeignKey('survey.id'))
+    question = db.Column(db.String(300), unique=False)
+    answer = db.Column(db.String(300), unique=False)
+
+    def __repr__(self):
+        return f"{self.question}-{self.answer}"
