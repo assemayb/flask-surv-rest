@@ -169,19 +169,38 @@ def add_to_survey():
                 response_data['questions'].append(data_dic)
         return send_response("200", response_data)
 
+#UPDATING SURVEY DATA
+@app.route("/survey-update", methods=["POST"])
+def update_survey():
+    try:
+        survey_id = request.args.get("id")
+        survey = Survey.query.get(int(survey_id))
+        request_data = json.loads(request.data)
+        questions_ids = request_data["changedQuestionsIDs"]
+        submitted_data = request_data["dataToSubmit"]
+        print(questions_ids)
+        for q in submitted_data:
+            question_id = q['id']
+            print(question_id, type(question_id))
+            if question_id in questions_ids:
+                question_ans = q['answers']
+                question = Question.query.get(question_id)
+                question.content = q.get('question_title')
+                db.session.commit()
+                question_old_answers = Answer.query.filter_by(question=question_id)
+                index = 0
+                for old_ans in question_old_answers:
+                    old_ans.content = question_ans[index]['answer_value']
+                    db.session.commit()
+                    index += 1
+        return send_response("200", {"msg": "ok Survey has been updated"})
+    except Exception as e:
+        print(e)
+        return send_response("400", {"msg": "error!"})
 
-# CHECK THE USER
-@app.route("/check-user", methods=["GET"])
-def check_user():
-    survey_id = int(request.args.get("survey"))
-    req_ip = request.remote_addr
-    time.sleep(1)
-    ip = FormMetaData.query.filter_by(survey=survey_id, user_ip=req_ip).first()
-    is_ip_saved = True if ip is not None else False
-    if is_ip_saved:
-        return send_response("204", {"msg": f"{req_ip} is not fine"})
-    else:
-        return send_response("200", {"msg": f"{req_ip} is fine"})
+    
+    print(question)
+
 
 
 # SUBMIT FORM
@@ -193,9 +212,7 @@ def submit_form():
     survey_data = submitted_data['submittedData']
     if (client_request_ip and survey_id):
         for single_item in survey_data:
-            # question_id = single_item["questionId"]
-            question_val =  single_item["quesVal"]
-            # answer_id = single_item["ansId"]
+            question_val = single_item["quesVal"]
             answer_val = single_item["ansVal"]
             new_form_data = FormData(
                 survey=survey_id,
@@ -215,17 +232,61 @@ def submit_form():
     else:
         return send_response("400", {"msg": "can't submit!"})
 
+
+# CHECK THE USER FROM META DATA
+@app.route("/check-user", methods=["GET"])
+def check_user():
+    survey_id = int(request.args.get("survey"))
+    req_ip = request.remote_addr
+    time.sleep(1)
+    ip = FormMetaData.query.filter_by(survey=survey_id, user_ip=req_ip).first()
+    is_ip_saved = True if ip is not None else False
+    if is_ip_saved:
+        return send_response("204", {"msg": f"{req_ip} is not fine"})
+    else:
+        return send_response("200", {"msg": f"{req_ip} is fine"})
+
+
 # GETTING A FORM DATA
 @app.route("/form-data", methods=["GET"])
 def get_form_data():
     survey_id = int(request.args.get("survey"))
     survey_data = FormData.query.filter_by(survey=survey_id)
     for x in survey_data:
-        survey, question = Survey.query.get(x.survey), Question.query.get(x.question)
+        survey, question = Survey.query.get(
+            x.survey), Question.query.get(x.question)
         answer = Answer.query.get(x.answer)
         print(x.id, survey.theme, question.content, answer.content)
     return send_response("200", {"msg": "ok for now!"})
-    
+
+
+# DELETE A SURVEY
+@app.route("/survey-delete", methods=["DELETE"])
+def delete_surv():
+    req_id = request.args.get('id')
+    req_user = request.args.get('username')
+    req_user_id = User.query.filter_by(name=req_user).first().id
+    survey = Survey.query.get(req_id)
+    if survey is None:
+        return send_response("400", {"msg": "no survey with this id is available!"})
+    if req_user_id == survey.creator:
+        survey_questions = Question.query.filter_by(survey=req_id)
+        for single_question in survey_questions:
+            questiond_id = single_question.id
+            associated_ans = Answer.query.filter_by(question=questiond_id)
+            for ans in associated_ans:
+                db.session.delete(ans)
+                db.session.commit()
+                print(f"====>Question {single_question.content} Deleted")
+            db.session.delete(single_question)
+            db.session.commit()
+            print(f"===>Answer {ans.content} Deleted")
+        db.session.delete(survey)
+        db.session.commit()
+        print(f"===> survey {survey.theme} deleted")
+        return send_response("200", {"msg": "ok done!"})
+    else:
+        return send_response("403", {"msg": "survey isn't created by you!"})
 
 
 # TEMP LOGIN
@@ -264,33 +325,3 @@ def create_user():
     db.session.add(new_user)
     db.session.commit()
     return send_response("200", {"msg": "ok cool User Added"})
-
-
-@app.route("/survey-delete", methods=["DELETE"])
-def delete_surv():
-    req_id = request.args.get('id')
-    req_user = request.args.get('username')
-    req_user_id = User.query.filter_by(name=req_user).first().id
-    survey = Survey.query.get(req_id)
-    if survey is None:
-        return send_response("400", {"msg": "no survey with this id is available!"})
-    if req_user_id == survey.creator:
-        db.session.delete(question_to_delete)
-        db.session.commit()
-        survey_questions = Question.query.filter_by(survey=req_id)
-        for single_question in survey_questions:
-            questiond_id = single_question.id
-            associated_ans = Answer.query.filter_by(question=questiond_id)
-            for ans in associated_ans:
-                db.session.delete(ans)
-                db.session.commit()
-                print(f"====>Question {single_question.content} Deleted")
-            db.session.delete(single_question)
-            db.session.commit()
-            print(f"===>Answer {ans.content} Deleted")
-        db.session.delete(survey)
-        db.session.commit()
-        print(f"===> survey {survey.theme} deleted")
-        return send_response("200", {"msg": "ok done!"})
-    else:
-        return send_response("403", {"msg": "survey isn't created by you!"})
