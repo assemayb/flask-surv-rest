@@ -106,6 +106,9 @@ def get_user_surveys():
                        "theme": survey.theme, "creator": survey.creator, "created_at": survey.created_at}
         survey_dict['creator_name'] = creator_name
         survey_dict['questions_num'] = questions_num
+        submitted_surv_num = FormMetaData.query.filter_by(
+            survey=survey.id).count()
+        survey_dict['submitted_surv_num'] = submitted_surv_num
         response.append(survey_dict)
     return send_response("200", json.dumps(response, default=str))
 
@@ -169,7 +172,9 @@ def add_to_survey():
                 response_data['questions'].append(data_dic)
         return send_response("200", response_data)
 
-#UPDATING SURVEY DATA
+# UPDATING SURVEY DATA
+
+
 @app.route("/survey-update", methods=["POST"])
 def update_survey():
     try:
@@ -187,7 +192,8 @@ def update_survey():
                 question = Question.query.get(question_id)
                 question.content = q.get('question_title')
                 db.session.commit()
-                question_old_answers = Answer.query.filter_by(question=question_id)
+                question_old_answers = Answer.query.filter_by(
+                    question=question_id)
                 index = 0
                 for old_ans in question_old_answers:
                     old_ans.content = question_ans[index]['answer_value']
@@ -198,12 +204,23 @@ def update_survey():
         print(e)
         return send_response("400", {"msg": "error!"})
 
-    
-    print(question)
 
-
+# CHECK THE USER FROM META DATA
+@app.route("/check-user", methods=["GET"])
+def check_user():
+    survey_id = int(request.args.get("survey"))
+    req_ip = request.remote_addr
+    time.sleep(1)
+    ip = FormMetaData.query.filter_by(survey=survey_id, user_ip=req_ip).first()
+    is_ip_saved = True if ip is not None else False
+    if is_ip_saved:
+        return send_response("204", {"msg": f"{req_ip} is not fine"})
+    else:
+        return send_response("200", {"msg": f"{req_ip} is fine"})
 
 # SUBMIT FORM
+
+
 @app.route("/submit-form", methods=["POST"])
 def submit_form():
     client_request_ip = request.remote_addr
@@ -232,32 +249,32 @@ def submit_form():
     else:
         return send_response("400", {"msg": "can't submit!"})
 
-
-# CHECK THE USER FROM META DATA
-@app.route("/check-user", methods=["GET"])
-def check_user():
-    survey_id = int(request.args.get("survey"))
-    req_ip = request.remote_addr
-    time.sleep(1)
-    ip = FormMetaData.query.filter_by(survey=survey_id, user_ip=req_ip).first()
-    is_ip_saved = True if ip is not None else False
-    if is_ip_saved:
-        return send_response("204", {"msg": f"{req_ip} is not fine"})
-    else:
-        return send_response("200", {"msg": f"{req_ip} is fine"})
-
-
 # GETTING A FORM DATA
+
+
 @app.route("/form-data", methods=["GET"])
 def get_form_data():
-    survey_id = int(request.args.get("survey"))
-    survey_data = FormData.query.filter_by(survey=survey_id)
-    for x in survey_data:
-        survey, question = Survey.query.get(
-            x.survey), Question.query.get(x.question)
-        answer = Answer.query.get(x.answer)
-        print(x.id, survey.theme, question.content, answer.content)
-    return send_response("200", {"msg": "ok for now!"})
+    try:
+        survey_id = int(request.args.get("survey"))
+        all_surv_questions = Question.query.filter_by(survey=survey_id)
+        result = []
+        index = 0
+        for question in all_surv_questions:
+            result.append({"question": question.content, "answers": []})
+            all_surv_answers = Answer.query.filter_by(question=question.id)
+            surv_question_answers = [ans.content for ans in all_surv_answers]
+            for idx, ans in enumerate(surv_question_answers):
+                answered_times = FormData.query.filter_by(answer=ans).count()
+                result[index]["answers"].append({
+                    "index": idx,
+                    "val": ans,
+                    "times": answered_times
+                })
+            index += 1
+        return send_response("200", {"result": result})
+    except Exception as e:
+        return send_response("400", {"msg": "bad request"})
+        print(e)
 
 
 # DELETE A SURVEY
