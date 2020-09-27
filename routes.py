@@ -213,6 +213,7 @@ def check_user():
     time.sleep(1)
     ip = FormMetaData.query.filter_by(survey=survey_id, user_ip=req_ip).first()
     is_ip_saved = True if ip is not None else False
+    print(is_ip_saved)
     if is_ip_saved:
         return send_response("204", {"msg": f"{req_ip} is not fine"})
     else:
@@ -249,29 +250,32 @@ def submit_form():
     else:
         return send_response("400", {"msg": "can't submit!"})
 
+
 # GETTING A FORM DATA
-
-
 @app.route("/form-data", methods=["GET"])
 def get_form_data():
     try:
         survey_id = int(request.args.get("survey"))
+        survey_title = Survey.query.get(survey_id).theme
         all_surv_questions = Question.query.filter_by(survey=survey_id)
-        result = []
+        questions = []
         index = 0
         for question in all_surv_questions:
-            result.append({"question": question.content, "answers": []})
-            all_surv_answers = Answer.query.filter_by(question=question.id)
+            question_id = question.id
+            print(question_id)
+            questions.append({"question": question.content, "answers": []})
+            all_surv_answers = Answer.query.filter_by(question=question_id)
             surv_question_answers = [ans.content for ans in all_surv_answers]
             for idx, ans in enumerate(surv_question_answers):
-                answered_times = FormData.query.filter_by(answer=ans).count()
-                result[index]["answers"].append({
+                answered_times = FormData.query.filter_by(answer=ans, survey=survey_id).count()
+                questions[index]["answers"].append({
                     "index": idx,
                     "val": ans,
                     "times": answered_times
                 })
             index += 1
-        return send_response("200", {"result": result})
+        result = {"survey_title":survey_title, "questions": questions}
+        return send_response("200", result)
     except Exception as e:
         return send_response("400", {"msg": "bad request"})
         print(e)
@@ -281,6 +285,7 @@ def get_form_data():
 @app.route("/survey-delete", methods=["DELETE"])
 def delete_surv():
     req_id = request.args.get('id')
+    print("req_id", req_id)
     req_user = request.args.get('username')
     req_user_id = User.query.filter_by(name=req_user).first().id
     survey = Survey.query.get(req_id)
@@ -294,13 +299,15 @@ def delete_surv():
             for ans in associated_ans:
                 db.session.delete(ans)
                 db.session.commit()
-                print(f"====>Question {single_question.content} Deleted")
             db.session.delete(single_question)
             db.session.commit()
-            print(f"===>Answer {ans.content} Deleted")
         db.session.delete(survey)
         db.session.commit()
-        print(f"===> survey {survey.theme} deleted")
+        survey_in_meta_form = FormMetaData.query.filter_by(
+            survey=req_id).first()
+        db.session.delete(survey_in_meta_form)
+        db.session.commit()
+        
         return send_response("200", {"msg": "ok done!"})
     else:
         return send_response("403", {"msg": "survey isn't created by you!"})
